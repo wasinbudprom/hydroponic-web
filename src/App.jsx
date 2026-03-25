@@ -2,7 +2,8 @@
 import { Settings2, Activity, Thermometer, Droplets, Zap, Wind } from 'lucide-react';
 import './App.css';
 import { db } from "./firebase";
-import { ref, onValue, set } from "firebase/database";
+import { ref, onValue, set ,get } from "firebase/database";
+import DailyStatsContainer from "./components/DailyStatsContainer";
 
 
 import Dashboard from './components/Dashboard';
@@ -11,6 +12,7 @@ import TimerModal from './components/TimerModal';
 
 export default function App() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
   const [modalMode, setModalMode] = useState('fog'); // 'fog' | 'light'
   const [isFogging, setIsFogging] = useState(false);
   const [isLight, setIsLight] = useState(false);
@@ -68,6 +70,14 @@ export default function App() {
       setIsAutoMode(mode === "auto");
     });
   }, []);
+
+  useEffect(() => {
+    if (isReportOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "auto";
+    }
+  }, [isReportOpen]);
 
   useEffect(() => {
     const sensorRef = ref(db, "/device/esp32_01/sensor");
@@ -133,9 +143,10 @@ export default function App() {
   });
 
   const sensorData = [
-    { icon: Droplets, label: 'ความชื้น', value: stats.temp, unit: '%', color: 'text-blue-500 bg-blue-50', progress: 75 },
-    { icon: Zap, label: 'ค่า EC (ปุ๋ย)', value: stats.ec, unit: 'mS/cm', color: 'text-yellow-500 bg-yellow-50', progress: 40 },
-    { icon: Wind, label: 'ค่า pH', value: stats.ph, unit: 'pH', color: 'text-purple-500 bg-purple-50', progress: 60 }
+    { icon: Thermometer, label: 'อุณหภูมิ', value: stats.temp ?? 0, unit: '°C', color: 'text-red-500 bg-red-50'},
+    { icon: Zap, label: 'ค่า EC (ปุ๋ย)', value: stats.ec ?? 0, unit: 'mS/cm', color: 'text-yellow-500 bg-yellow-100'},
+    { icon: Wind, label: 'ค่า pH', value: stats.ph ?? 0, unit: 'pH', color: 'text-purple-500 bg-purple-50'},
+    { icon: Droplets, label: 'ความชื้น', value: stats.humidity ?? 0, unit: '%', color: 'text-blue-500 bg-blue-50'},
   ];
 
   return (
@@ -179,6 +190,14 @@ export default function App() {
         </header>
 
         <div className="dashboard-grid">
+          <div className="lg:hidden flex justify-end">
+            <button
+              onClick={() => setIsReportOpen(true)}
+              className="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-500 text-white hover:bg-emerald-600 transition"
+            >
+              📊 สรุปรายงาน
+            </button>
+          </div>
           <Dashboard
             sensors={sensorData}
             isFogging={isFogging}
@@ -191,32 +210,16 @@ export default function App() {
           />
 
           <div className="lg:col-span-4 space-y-8">
+            <div className="hidden lg:flex justify-end mb-4">
+              <button
+                onClick={() => setIsReportOpen(true)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-500 text-white"
+              >
+                📊 สรุปรายงาน
+              </button>
+            </div>
             <CameraView />
 
-            <div className="report-card">
-              <h4 className="font-black text-slate-800 mb-6 flex items-center gap-2">
-                <Activity size={18} className="text-emerald-500" /> รายงานวันนี้
-              </h4>
-              <div className="space-y-4">
-                {[
-                  { l: "พ่นหมอก", v: "48 รอบ" },
-                  { l: "สถานะปั๊ม", v: "ปกติ" },
-                ].map((item, i) => (
-                  <div
-                    key={i}
-                    className="flex justify-between py-3 border-b border-slate-50 last:border-0"
-                  >
-                    <span className="text-slate-400 text-sm font-medium">
-                      {item.l}
-                    </span>
-                    <span className="text-slate-700 font-bold">{item.v}</span>
-                  </div>
-                ))}
-              </div>
-              <p className="text-[10px] text-center text-slate-300 mt-6">
-                อัปเดตล่าสุดเมื่อ {stats.lastUpdate}
-              </p>
-            </div>
             <div className="report-card mt-8">
               <h4 className="font-black text-slate-800 mb-4">
                 ตั้งค่าปัจจุบัน (Auto)
@@ -245,6 +248,36 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {isReportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* 🔥 Overlay */}
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setIsReportOpen(false)}
+          />
+
+          {/* 🔥 Modal Box */}
+          <div className="relative bg-white rounded-2xl shadow-xl w-[95%] h-[90%] p-6 overflow-y-auto">
+            {/* Header */}
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-bold text-lg">
+                <Activity size={18} className="text-emerald-500 inline" />{" "}
+                &nbsp; รายงานย้อนหลัง
+              </h3>
+              <button
+                onClick={() => setIsReportOpen(false)}
+                className="text-slate-400 hover:text-red-500"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Content */}
+            <DailyStatsContainer lastUpdate={stats.lastUpdate} />
+          </div>
+        </div>
+      )}
 
       <TimerModal
         isOpen={isModalOpen}

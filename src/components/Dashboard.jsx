@@ -16,12 +16,6 @@ const SensorItem = ({ icon: Icon, label, value, unit, color, progress }) => (
         </div>
       </div>
     </div>
-    <div className="progress-bar-bg">
-      <div
-        className={`h-full opacity-70 ${color.replace("text-", "bg-")}`}
-        style={{ width: `${progress}%` }}
-      ></div>
-    </div>
   </div>
 );
 

@@ -1,8 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { getDatabase, ref, onValue, set } from "firebase/database";
 
 const CameraView = () => {
   const [imageUrl, setImageUrl] = useState("");
+  const [isCapturing, setIsCapturing] = useState(false);
+  const timeoutRef = useRef(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const db = getDatabase();
@@ -12,6 +15,10 @@ const CameraView = () => {
       const data = snapshot.val();
       if (data) {
         setImageUrl(data);
+        setIsCapturing(false);
+        setError("");
+
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
       }
     });
 
@@ -22,10 +29,22 @@ const CameraView = () => {
     const db = getDatabase();
 
     try {
+      setIsCapturing(true);
+      setError(""); // เคลียร์ error ก่อน
+
       await set(ref(db, "device/esp32_01/camera/capture"), true);
-      console.log("Capture set to true");
+
+      // ⏱ timeout 10 วิ
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+
+      timeoutRef.current = setTimeout(() => {
+        setIsCapturing(false);
+        setError("❌ ไม่พบภาพจากกล้อง");
+      }, 10000);
     } catch (error) {
       console.error("Firebase write error:", error);
+      setIsCapturing(false);
+      setError("❌ เกิดข้อผิดพลาด");
     }
   };
 
@@ -50,11 +69,19 @@ const CameraView = () => {
       </div>
 
       <button
-        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded cursor-pointer"
+        disabled={isCapturing}
+        className={`font-bold py-2 px-4 rounded transition ${
+          isCapturing
+            ? "bg-gray-400 cursor-not-allowed"
+            : "bg-blue-500 hover:bg-blue-700 text-white"
+        }`}
         onClick={captureImage}
       >
-        📸 ถ่ายภาพ
+        {isCapturing ? "⏳ กำลังถ่ายภาพ..." : "📸 ถ่ายภาพ"}
       </button>
+      {error && (
+        <p className="text-red-500 text-sm mt-2 text-center">{error}</p>
+      )}
     </>
   );
 };

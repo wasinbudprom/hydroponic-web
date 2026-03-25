@@ -282,8 +282,8 @@ const [lightEnd, setLightEnd] = useState("");
             onClick={async () => {
               try {
                 if (isLightMode) {
-                  const defaultStart = "18:00";
-                  const defaultEnd = "06:00";
+                  const defaultStart = "06:00";
+                  const defaultEnd = "18:00";
 
                   // 1️⃣ อัปเดต Firebase
                   await update(ref(db, "device/esp32_01/auto_config/light"), {
