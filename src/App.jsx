@@ -1,8 +1,9 @@
-﻿import { useState, useRef, useEffect, use } from 'react';
+﻿import { useState, useRef, useEffect } from 'react';
 import { Settings2, Activity, Thermometer, Droplets, Zap, Wind } from 'lucide-react';
 import './App.css';
-import { db } from "./firebase";
-import { ref, onValue, set ,get } from "firebase/database";
+import { auth, db } from "./firebase";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { ref, onValue, set } from "firebase/database";
 import DailyStatsContainer from "./components/DailyStatsContainer";
 
 
@@ -11,6 +12,13 @@ import CameraView from './components/CameraView';
 import TimerModal from './components/TimerModal';
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSigningIn, setIsSigningIn] = useState(false);
+  const [authError, setAuthError] = useState('');
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isReportOpen, setIsReportOpen] = useState(false);
   const [modalMode, setModalMode] = useState('fog'); // 'fog' | 'light'
@@ -23,20 +31,12 @@ export default function App() {
   const BASE = "/device/esp32_01/relay_manual";
   const MODE_PATH = "/device/esp32_01/mode";
 
-  const setMode = (auto) => {
-    setIsAutoMode(auto);
-    set(ref(db, "/device/esp32_01/mode"), auto ? "AUTO" : "MANUAL");
-    showToast(auto ? "เปลี่ยนเป็นโหมด AUTO" : "เปลี่ยนเป็นโหมด MANUAL");
-    set(ref(db, "/device/esp32_01/auto_config/light"), {
-      start: lightStart,
-      end: lightEnd,
+  useEffect(() => {
+    return onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
     });
-    set(ref(db, "/device/esp32_01/auto_config/fog"), {
-      times: schedules,
-      duration_sec: 30,
-    });
-    
-  };
+  }, []);
 
   const toggleMode = () => {
     const newMode = isAutoMode ? "manual" : "auto";
@@ -50,26 +50,35 @@ export default function App() {
   });
 
   useEffect(() => {
+    if (!user) return;
+
     // ===== Light = ch6 =====
     const lightRef = ref(db, `${BASE}/ch6`);
-    onValue(lightRef, (snap) => {
+    const unsubLight = onValue(lightRef, (snap) => {
       setIsLight(snap.val() === true);
     });
 
     // ===== Fog = ch5 =====
     const fogRef = ref(db, `${BASE}/ch5`);
-    onValue(fogRef, (snap) => {
+    const unsubFog = onValue(fogRef, (snap) => {
       setIsFogging(snap.val() === true);
     });
-  }, []);
+
+    return () => {
+      unsubLight();
+      unsubFog();
+    };
+  }, [user]);
 
   useEffect(() => {
+    if (!user) return;
+
     const modeRef = ref(db, MODE_PATH);
     return onValue(modeRef, (snap) => {
       const mode = snap.val();
       setIsAutoMode(mode === "auto");
     });
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (isReportOpen) {
@@ -80,6 +89,8 @@ export default function App() {
   }, [isReportOpen]);
 
   useEffect(() => {
+    if (!user) return;
+
     const sensorRef = ref(db, "/device/esp32_01/sensor");
     const unsub = onValue(sensorRef, (snap) => {
       const v = snap.val();
@@ -95,9 +106,11 @@ export default function App() {
     });
 
     return () => unsub();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
+    if (!user) return;
+
     const configRef = ref(db, "/device/esp32_01/auto_config");
 
     return onValue(configRef, (snap) => {
@@ -109,7 +122,7 @@ export default function App() {
         fog: data.fog || { times: [], duration_sec: 0 },
       });
     });
-  }, []);
+  }, [user]);
 
   const setFog = (value) => {
     set(ref(db, `${BASE}/ch5`), value);
@@ -134,6 +147,27 @@ export default function App() {
     toastTimerRef.current = setTimeout(() => setToast(''), 2500);
   });
 
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setAuthError('');
+    setIsSigningIn(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      showToast("เข้าสู่ระบบสำเร็จ");
+      setPassword('');
+    } catch {
+      setAuthError("อีเมลหรือรหัสผ่านไม่ถูกต้อง");
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    showToast("ออกจากระบบแล้ว");
+  };
+
   const [stats, setStats] = useState({
     temp: null,
     humidity: null,
@@ -148,6 +182,66 @@ export default function App() {
     { icon: Wind, label: 'ค่า pH', value: stats.ph ?? 0, unit: 'pH', color: 'text-purple-500 bg-purple-50'},
     { icon: Droplets, label: 'ความชื้น', value: stats.humidity ?? 0, unit: '%', color: 'text-blue-500 bg-blue-50'},
   ];
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-50 grid place-items-center px-4">
+        <p className="text-slate-500 font-medium">กำลังตรวจสอบสถานะผู้ใช้...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-linear-to-br from-emerald-50 via-white to-cyan-50 grid place-items-center px-4">
+        <form
+          onSubmit={handleLogin}
+          className="w-full max-w-md bg-white border border-emerald-100 rounded-2xl shadow-xl shadow-emerald-100/40 p-6 space-y-4"
+        >
+          <div className="space-y-1">
+            <h1 className="text-2xl font-black text-slate-900">Aeroponic Login</h1>
+            <p className="text-sm text-slate-500">เข้าสู่ระบบ</p>
+          </div>
+
+          <label className="block text-sm font-semibold text-slate-700">
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-300"
+              placeholder="you@example.com"
+              required
+            />
+          </label>
+
+          <label className="block text-sm font-semibold text-slate-700">
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:ring-2 focus:ring-emerald-300"
+              placeholder="••••••••"
+              required
+            />
+          </label>
+
+          {authError && (
+            <p className="rounded-lg bg-red-50 text-red-600 text-sm font-medium px-3 py-2">{authError}</p>
+          )}
+
+          <button
+            type="submit"
+            disabled={isSigningIn}
+            className="w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-300 text-white font-semibold py-2.5 transition"
+          >
+            {isSigningIn ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -168,6 +262,9 @@ export default function App() {
           </div>
 
           <div className="flex items-center gap-3">
+            <span className="hidden md:inline text-xs font-semibold text-slate-500">
+              {user.email}
+            </span>
             <span
               className={`text-xs font-bold px-3 py-1 rounded-full ${isAutoMode ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}
             >
@@ -185,6 +282,12 @@ export default function App() {
             </button> */}
             <button onClick={toggleMode}>
               <Settings2 />
+            </button>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700"
+            >
+              ออกจากระบบ
             </button>
           </div>
         </header>
