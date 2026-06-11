@@ -1,4 +1,4 @@
-﻿import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Settings2, Activity, Thermometer, Droplets, Zap, Wind } from 'lucide-react';
 import './App.css';
 import { auth, db } from "./firebase";

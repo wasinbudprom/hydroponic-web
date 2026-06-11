@@ -1,6 +1,8 @@
-﻿import React from "react";
+﻿import React, { useState } from "react";
 import { Activity, Play, Square } from "lucide-react";
 import CustomButton from "./CustomButton";
+import { ref, set } from "firebase/database";
+import { db } from "../firebase";
 
 const SensorItem = ({ icon: Icon, label, value, unit, color, progress }) => (
   <div className="sensor-card group">
@@ -30,6 +32,39 @@ const Dashboard = ({
   isAutoMode,
   onMixNutrient,
 }) => {
+  // ← ย้าย useState เข้ามาอยู่ใน component
+  const [growthStage, setGrowthStage] = useState("seedling");
+
+  // ← ย้ายฟังก์ชันเข้ามาอยู่ใน component
+  const handleSetGrowthStage = async (stage) => {
+    const ecValue = stage === "seedling" ? 950 : 1250;
+    try {
+      await set(ref(db, "/device/esp32_01/auto_config/ec_limit"), ecValue);
+      setGrowthStage(stage);
+      onNotify(
+        stage === "seedling"
+          ? "🌱 ตั้งค่าต้นอ่อน EC 950"
+          : "🥔 ตั้งค่าต้นโต EC 1250",
+      );
+    } catch (err) {
+      onNotify("เกิดข้อผิดพลาด");
+    }
+  };
+
+  const handleSetup = async () => {
+    const confirmed = window.confirm(
+      "⚠️ ระบบจะเปิด ปั้มน้ำเล็ก 4 ตัว ค้างไว้ 20 วินาที\nต้องการเริ่ม Setup หรือไม่?",
+    );
+    if (!confirmed) return;
+
+    try {
+      await set(ref(db, "/device/esp32_01/setup/start"), true);
+      onNotify("🔧 เริ่ม Setup...");
+    } catch (err) {
+      onNotify("เกิดข้อผิดพลาด");
+    }
+  };
+
   const notify = onNotify || (() => {});
   const manualDisabled =
     isAutoMode; /*ถ้าเปิดโหมด Auto ไว้ ปุ่มกดมือ (Manual) ทั้งหมดจะถูกปิดใช้งานทันที*/
@@ -42,6 +77,52 @@ const Dashboard = ({
           <SensorItem key={i} {...s} />
         ))}
       </div>
+
+      <button
+        onClick={handleSetup}
+        className="w-full py-3 rounded-2xl bg-red-500 text-white font-bold hover:bg-red-600 transition"
+      >
+        🔧 Setup ระบบ
+      </button>
+
+      {/* Growth Stage Selector */}
+      <div className="action-panel">
+        <div className="panel-glow"></div>
+
+        <div className="relative z-10">
+          <div className="flex items-center justify-between mb-8">
+            <h3 className="text-xl font-bold flex items-center gap-2">
+              <Activity size={20} className="text-emerald-400" />
+              เลือกระยะการเจริญเติบโต เพื่อปรับค่า EC ของปุ๋ยอัตโนมัติ
+            </h3>
+
+            <div className="status-tag bg-white/10 text-slate-400">
+              {growthStage === "seedling" ? "🌱 ต้นอ่อน" : "🌿 โตเต็มวัย"}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <CustomButton
+              variant={growthStage === "seedling" ? "primary" : "secondary"}
+              className="w-full"
+              onClick={() => handleSetGrowthStage("seedling")}
+            >
+              🌱 ต้นอ่อน
+              <div className="text-xs opacity-80 mt-1">EC 950</div>
+            </CustomButton>
+
+            <CustomButton
+              variant={growthStage === "mature" ? "primary" : "secondary"}
+              className="w-full"
+              onClick={() => handleSetGrowthStage("mature")}
+            >
+              🌿 โตเต็มวัย
+              <div className="text-xs opacity-80 mt-1">EC 1250</div>
+            </CustomButton>
+          </div>
+        </div>
+      </div>
+
       <div className="action-panel">
         <div className="panel-glow"></div>
 
@@ -72,7 +153,7 @@ const Dashboard = ({
                 }
 
                 notify("เริ่มผสมปุ๋ย...");
-                onMixNutrient(2.5);
+                onMixNutrient(1);
               }}
             >
               🌱 ต้นอ่อน
@@ -92,7 +173,7 @@ const Dashboard = ({
                 }
 
                 notify("เริ่มผสมปุ๋ย...");
-                onMixNutrient(5);
+                onMixNutrient(2);
               }}
             >
               🌿 โตเต็มวัย
