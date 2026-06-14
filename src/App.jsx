@@ -196,7 +196,7 @@ export default function App() {
 
   const sensorData = [
     { icon: Thermometer, label: 'อุณหภูมิ', value: stats.temp ?? 0, unit: '°C', color: 'text-red-500 bg-red-50'},
-    { icon: Zap, label: 'ค่า EC (ปุ๋ย)', value: stats.ec ?? 0, unit: 'mS/cm', color: 'text-yellow-500 bg-yellow-100'},
+    { icon: Zap, label: 'ค่า EC (ปุ๋ย)', value: stats.ec ?? 0, unit: 'ppm', color: 'text-yellow-500 bg-yellow-100'},
     { icon: Wind, label: 'ค่า pH', value: stats.ph ?? 0, unit: 'pH', color: 'text-purple-500 bg-purple-50'},
     { icon: Droplets, label: 'ความชื้น', value: stats.humidity ?? 0, unit: '%', color: 'text-blue-500 bg-blue-50'},
   ];
